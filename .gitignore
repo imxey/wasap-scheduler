@@ -1,0 +1,5 @@
+node_modules
+.env
+schedules.db
+package-lock.json
+auth

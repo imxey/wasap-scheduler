@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    container_name: my-node-app
+    # ports:
+    #   - "3000"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./schedules.db:/app/schedules.db
+      - ./auth:/app/auth
+    networks:
+      - mynetwork
+networks:
+  mynetwork:
