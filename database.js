@@ -4,13 +4,15 @@ let pool;
 
 async function initDB() {
   pool = mysql.createPool({
-    host: process.env.DB_HOST || "mysql",
-    user: process.env.DB_USER || "wasap",
-    password: process.env.DB_PASSWORD || "wasap123",
+    host: process.env.DB_HOST || "localhost",
+    user: process.env.DB_USER || "root",
+    password: process.env.DB_PASSWORD || "",
     database: process.env.DB_NAME || "wasap",
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
+
+    dateStrings: true,
   });
 
   const connection = await pool.getConnection();
@@ -39,4 +41,8 @@ async function getUpcomingSchedules(db, userId) {
   return rows;
 }
 
-module.exports = { initDB, getUpcomingSchedules };
+async function markAsReminded(db, id) {
+  await db.query(`UPDATE schedules SET is_reminded = 1 WHERE id = ?`, [id]);
+}
+
+module.exports = { initDB, getUpcomingSchedules, markAsReminded };

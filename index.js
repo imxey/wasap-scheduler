@@ -5,7 +5,7 @@ const {
 } = require("baileys");
 const QRCode = require("qrcode");
 const { parseSchedule, generateAIResponse } = require("./ai");
-const { initDB, getUpcomingSchedules } = require("./database");
+const { initDB, getUpcomingSchedules, markAsReminded } = require("./database");
 
 let db;
 
@@ -81,26 +81,36 @@ async function connectToWhatsApp() {
   });
 
   setInterval(async () => {
-    const now = new Date();
+    const nowInJakarta = new Date().toLocaleString("sv-SE", {
+      timeZone: "Asia/Jakarta",
+    });
 
-    const nowStr = now
-      .toLocaleString("sv-SE", { timeZone: "Asia/Jakarta" })
-      .replace(" ", " ")
-      .substring(0, 16);
+    const currentMinute = nowInJakarta.replace("T", " ").substring(0, 16);
 
-    const tasks = await db.query(
-      `SELECT * FROM schedules WHERE DATE_FORMAT(time, '%Y-%m-%d %H:%i') = ? AND is_reminded = 0`,
-      [nowStr]
-    );
+    console.log(`🕵️‍♀️ Cek Reminder (WIB): ${currentMinute}`);
 
-    for (const task of tasks[0]) {
-      await sock.sendMessage(task.user_id, {
-        text: `🔔 PENGINGAT!\n\nHalo, waktunya: ${task.task} sekarang!`,
-      });
+    try {
+      const [tasks] = await db.query(
+        `SELECT * FROM schedules 
+             WHERE DATE_FORMAT(time, '%Y-%m-%d %H:%i') = ? 
+             AND is_reminded = 0`,
+        [currentMinute]
+      );
 
-      await db.query(`UPDATE schedules SET is_reminded = 1 WHERE id = ?`, [
-        task.id,
-      ]);
+      if (tasks.length > 0) {
+        console.log(`🔔 WAKTU TIBA! Mengirim ${tasks.length} pengingat...`);
+
+        for (const task of tasks) {
+          await sock.sendMessage(task.user_id, {
+            text: `🔔 *PENGINGAT XEYLA!*\n\nHalo kak! Jangan lupa: *${task.task}* sekarang ya!\n(Waktu: ${task.time})`,
+          });
+
+          await markAsReminded(db, task.id);
+          console.log(`✅ Sukses ingetin tugas: ${task.task}`);
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error Scheduler:", error.message);
     }
   }, 60000);
 
