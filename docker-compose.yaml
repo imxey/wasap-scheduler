@@ -7,9 +7,10 @@ services:
     environment:
       - NODE_ENV=development
     volumes:
-      - ./schedules.db:/app/schedules.db
-      - ./auth:/app/auth
+      - wasap-data:/app
     networks:
       - mynetwork
 networks:
   mynetwork:
+volumes:
+  wasap-data:
