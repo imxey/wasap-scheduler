@@ -7,5 +7,4 @@ WORKDIR /app
 
 COPY . .
 RUN npm install
-RUN npm update
 CMD ["node", "index.js"]

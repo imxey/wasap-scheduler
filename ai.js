@@ -5,6 +5,17 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+// Helper sakti buat format YYYY-MM-DD sesuai zona waktu Jakarta
+// Jadi jam 1 malem tetep diitung hari ini, bukan kemarin!
+function getJakartaDateStr(dateObj) {
+  return dateObj.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
 function getContextDates() {
   const now = new Date();
   const tomorrow = new Date(now);
@@ -27,8 +38,9 @@ function getContextDates() {
   return {
     todayStr: now.toLocaleDateString("id-ID", options),
     tomorrowStr: tomorrow.toLocaleDateString("id-ID", options),
-    todayShort: now.toISOString().split("T")[0],
-    tomorrowShort: tomorrow.toISOString().split("T")[0],
+    // INI PERBAIKANNYA: Jangan pake toISOString(), pake helper Jakarta
+    todayShort: getJakartaDateStr(now), // "2026-01-13" (Bener!)
+    tomorrowShort: getJakartaDateStr(tomorrow), // "2026-01-14"
     timeStr: now.toLocaleTimeString("id-ID", timeOptions),
   };
 }
@@ -45,10 +57,13 @@ async function parseSchedule(message) {
     Role: Strict Schedule Extractor.
     Task: Convert user commands into JSON.
     
-    CRITICAL RULES:
+    RULES:
     1. IF user asks questions (e.g. "Besok ada apa?", "Cek jadwal"), RETURN NULL.
-    2. ONLY return JSON if user EXPLICITLY wants to create a task (e.g. "Ingetin...", "Jadwalin...", "Ke rumah temen jam 10").
+    2. ONLY return JSON if user EXPLICITLY wants to create a task (e.g. "Ingetin...", "Jadwalin...").
     3. JSON Format: {"task": "string", "time": "YYYY-MM-DD HH:mm:ss"}
+    
+    MIDNIGHT RULE:
+    If Current Time is between 00:00 and 04:00, and user says "Besok", assume they mean the actual next calendar day (Date + 1).
   `;
 
   try {
@@ -87,14 +102,43 @@ async function generateAIResponse(message, schedules = []) {
     schedules.length > 0
       ? schedules
           .map((s) => {
-            const d = new Date(s.time);
-            const dateOnly = s.time.split(" ")[0];
-            const timeOnly = s.time.split(" ")[1].substring(0, 5);
+            // --- BAGIAN PERBAIKAN TIMEZONE ---
+            // Kita asumsikan s.time formatnya "YYYY-MM-DD HH:mm:ss"
+            // Kita ubah jadi "YYYY-MM-DDTHH:mm:ss+07:00" biar JS tau ini WIB!
+
+            let timeString = s.time;
+
+            // Kalau s.time bentuknya object Date (kadang driver sql otomatis ubah), balikin ke string dulu
+            if (s.time instanceof Date) {
+              // Hati-hati di sini, mending kita ambil raw stringnya kalau bisa
+              // Tapi kalau udah terlanjur object, kita format manual
+              const y = s.time.getFullYear();
+              const m = String(s.time.getMonth() + 1).padStart(2, "0");
+              const d = String(s.time.getDate()).padStart(2, "0");
+              const h = String(s.time.getHours()).padStart(2, "0");
+              const min = String(s.time.getMinutes()).padStart(2, "0");
+              const sec = String(s.time.getSeconds()).padStart(2, "0");
+              timeString = `${y}-${m}-${d} ${h}:${min}:${sec}`;
+            }
+
+            // KUNCI PERBAIKAN: Tambahin +07:00 secara paksa!
+            const safeDateStr = timeString.replace(" ", "T") + "+07:00";
+            const d = new Date(safeDateStr);
+
+            // Format ulang buat label (tetep pake timezone Jakarta)
+            const dateOnly = getJakartaDateStr(d);
+            const timeOnly = d.toLocaleTimeString("id-ID", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+              timeZone: "Asia/Jakarta",
+            });
 
             let dayLabel = d.toLocaleDateString("id-ID", {
               weekday: "long",
               day: "numeric",
               month: "short",
+              timeZone: "Asia/Jakarta",
             });
 
             if (dateOnly === todayShort) dayLabel = "🔴 HARI INI";
@@ -118,7 +162,7 @@ async function generateAIResponse(message, schedules = []) {
     1. Answer based on the "DATA JADWAL USER" above.
     2. If user asks "Hari ini ada apa?", look for items marked with "🔴 HARI INI".
     3. If user asks "Besok ada apa?", look for items marked with "🔵 BESOK".
-    4. If user asks "Semua jadwal", list EVERYTHING you see in the data above. DO NOT FILTER OR HIDE ANYTHING.
+    4. If user asks "Semua jadwal", list EVERYTHING.
     5. Reply in Indonesian slang.
   `;
 
@@ -136,5 +180,4 @@ async function generateAIResponse(message, schedules = []) {
     return "Error AI";
   }
 }
-
 module.exports = { parseSchedule, generateAIResponse };

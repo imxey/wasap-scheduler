@@ -54,11 +54,9 @@ async function connectToWhatsApp() {
       const scheduleData = await parseSchedule(textMessage);
 
       if (scheduleData) {
-        await db.run(
+        await db.query(
           `INSERT INTO schedules (task, time, user_id) VALUES (?, ?, ?)`,
-          scheduleData.task,
-          scheduleData.time,
-          remoteJid
+          [scheduleData.task, scheduleData.time, remoteJid]
         );
 
         console.log(
@@ -90,20 +88,19 @@ async function connectToWhatsApp() {
       .replace(" ", " ")
       .substring(0, 16);
 
-    const tasks = await db.all(
-      `SELECT * FROM schedules WHERE strftime('%Y-%m-%d %H:%M', time) = ? AND is_reminded = 0`,
-      nowStr
+    const tasks = await db.query(
+      `SELECT * FROM schedules WHERE DATE_FORMAT(time, '%Y-%m-%d %H:%i') = ? AND is_reminded = 0`,
+      [nowStr]
     );
 
-    for (const task of tasks) {
+    for (const task of tasks[0]) {
       await sock.sendMessage(task.user_id, {
         text: `🔔 PENGINGAT!\n\nHalo, waktunya: ${task.task} sekarang!`,
       });
 
-      await db.run(
-        `UPDATE schedules SET is_reminded = 1 WHERE id = ?`,
-        task.id
-      );
+      await db.query(`UPDATE schedules SET is_reminded = 1 WHERE id = ?`, [
+        task.id,
+      ]);
     }
   }, 60000);
 

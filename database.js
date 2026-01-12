@@ -1,37 +1,42 @@
-const sqlite3 = require("sqlite3");
-const { open } = require("sqlite");
-const path = require("path");
-const fs = require("fs");
+const mysql = require("mysql2/promise");
+
+let pool;
 
 async function initDB() {
-  // Ensure the directory exists
-  const dbDir = path.dirname("./schedules.db");
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-  }
-
-  const db = await open({
-    filename: path.resolve("./schedules.db"),
-    driver: sqlite3.Database,
+  pool = mysql.createPool({
+    host: process.env.DB_HOST || "mysql",
+    user: process.env.DB_USER || "wasap",
+    password: process.env.DB_PASSWORD || "wasap123",
+    database: process.env.DB_NAME || "wasap",
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
   });
 
-  await db.exec(`
+  const connection = await pool.getConnection();
+
+  await connection.query(`
     CREATE TABLE IF NOT EXISTS schedules (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id INT AUTO_INCREMENT PRIMARY KEY,
       task TEXT,
       time DATETIME,
-      user_id TEXT,
-      is_reminded BOOLEAN DEFAULT 0
+      user_id VARCHAR(255),
+      is_reminded BOOLEAN DEFAULT 0,
+      INDEX idx_user_time (user_id, time),
+      INDEX idx_reminded (is_reminded, time)
     )
   `);
 
-  return db;
+  connection.release();
+  return pool;
 }
 
 async function getUpcomingSchedules(db, userId) {
-  return await db.all(
+  const [rows] = await db.query(
     `SELECT * FROM schedules WHERE user_id = ? ORDER BY time ASC`,
-    userId
+    [userId]
   );
+  return rows;
 }
+
 module.exports = { initDB, getUpcomingSchedules };

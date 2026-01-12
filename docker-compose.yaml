@@ -2,15 +2,37 @@ services:
   app:
     build: .
     container_name: wasap-scheduler
-    # ports:
-    #   - "3000"
+    restart: always
+    depends_on:
+      - mysql
     environment:
       - NODE_ENV=development
+      - DB_HOST=mysql
+      - DB_USER=wasap
+      - DB_PASSWORD=wasap123
+      - DB_NAME=wasap
     volumes:
-      - wasap-data:/app
+      - ./auth:/app/auth
+      - ./.env:/app/.env
     networks:
-      - mynetwork
+      - wanetwork
+
+  mysql:
+    image: mysql:8.0
+    container_name: wasap-mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+      - MYSQL_DATABASE=wasap
+      - MYSQL_USER=wasap
+      - MYSQL_PASSWORD=wasap123
+    volumes:
+      - wasap-data:/var/lib/mysql
+    networks:
+      - wanetwork
+    restart: unless-stopped
+
 networks:
-  mynetwork:
+  wanetwork:
+
 volumes:
   wasap-data:
