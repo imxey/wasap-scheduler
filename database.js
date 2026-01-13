@@ -45,4 +45,29 @@ async function markAsReminded(db, id) {
   await db.query(`UPDATE schedules SET is_reminded = 1 WHERE id = ?`, [id]);
 }
 
-module.exports = { initDB, getUpcomingSchedules, markAsReminded };
+async function deleteSchedule(db, id) {
+  const [result] = await db.query(`DELETE FROM schedules WHERE id = ?`, [id]);
+  return result.affectedRows > 0;
+}
+
+async function updateSchedule(db, id, newTask, newTime) {
+  const [result] = await db.query(
+    `UPDATE schedules SET task = ?, time = ? WHERE id = ?`,
+    [newTask, newTime, id]
+  );
+  return result.affectedRows > 0;
+}
+
+async function getScheduleById(db, id) {
+  const [rows] = await db.query(`SELECT * FROM schedules WHERE id = ?`, [id]);
+  return rows.length > 0 ? rows[0] : null;
+}
+
+module.exports = {
+  initDB,
+  getUpcomingSchedules,
+  markAsReminded,
+  deleteSchedule,
+  updateSchedule,
+  getScheduleById,
+};
