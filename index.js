@@ -69,8 +69,11 @@ async function connectToWhatsApp() {
       console.log(msg);
       if (!textMessage) return;
 
-      const trustedNumber = "6285183520848";
-      const isTrustedPC = !isGroup && remoteJid.startsWith(trustedNumber);
+      const trustedNumbers = (process.env.TRUSTED_NUMBERS || "")
+        .split(",")
+        .map((n) => n.trim());
+      const isTrustedPC =
+        !isGroup && trustedNumbers.some((num) => remoteJid.startsWith(num));
       const requiresPrefix = isGroup || !isTrustedPC;
 
       if (requiresPrefix && !textMessage.startsWith("p,")) return;
