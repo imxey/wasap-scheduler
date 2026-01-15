@@ -69,9 +69,11 @@ async function connectToWhatsApp() {
       console.log(msg);
       if (!textMessage) return;
 
-      if (!textMessage.startsWith("p,")) return;
+      if (isGroup && !textMessage.startsWith("p,")) return;
 
-      const cleanMessage = textMessage.substring(2).trim();
+      const cleanMessage = isGroup
+        ? textMessage.substring(2).trim()
+        : textMessage;
 
       console.log(`[MESSAGE] Clean message: "${cleanMessage}"`);
 
