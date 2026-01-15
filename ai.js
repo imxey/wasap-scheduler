@@ -269,11 +269,57 @@ async function parseDeleteRequest(message, userSchedules) {
   }
 }
 
+async function determineMessageType(message) {
+  const systemPrompt = `
+    Role: Message Classifier for Bot Gateway
+    Task: Determine if user message is about SCHEDULING or FINANCE
+    
+    RULES:
+    1. SCHEDULING: Messages about creating tasks, reminders, events, checking schedule (e.g. "ingetin", "jadwalin", "besok ada apa", "cek jadwal")
+    2. FINANCE: Messages about money transactions, expenses, income, balance queries (e.g. "beli", "dapat", "berapa saldo", "pengeluaran")
+    3. Return JSON: {"type": "schedule"|"finance"} only
+    4. If message could be either, classify based on primary intent
+    
+    EXAMPLES:
+    - "Ingetin meeting jam 2" → {"type": "schedule"}
+    - "Beli cilok 2k" → {"type": "finance"}
+    - "Besok ada apa" → {"type": "schedule"}
+    - "Berapa saldo" → {"type": "finance"}
+  `;
+
+  try {
+    const completion = await groq.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: message },
+      ],
+      model: "openai/gpt-oss-120b",
+      temperature: 0.1,
+    });
+
+    const content = completion.choices[0]?.message?.content || "null";
+    const cleanContent = content
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    try {
+      const parsed = JSON.parse(cleanContent);
+      return parsed.type || "schedule";
+    } catch {
+      return "schedule";
+    }
+  } catch (error) {
+    return "schedule";
+  }
+}
+
 module.exports = {
   parseSchedule,
   generateAIResponse,
   parseDeleteRequest,
   parseEditRequest,
+  determineMessageType,
 };
 async function parseEditRequest(message, userSchedules) {
   const { todayStr, tomorrowStr, timeStr, todayShort, tomorrowShort } =

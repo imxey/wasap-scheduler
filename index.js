@@ -4,20 +4,20 @@ const {
   DisconnectReason,
 } = require("baileys");
 const QRCode = require("qrcode");
+const { determineMessageType } = require("./ai");
+const { initDB, getUpcomingSchedules, markAsReminded } = require("./database");
 const {
-  parseSchedule,
-  generateAIResponse,
-  parseDeleteRequest,
-  parseEditRequest,
-} = require("./ai");
+  handleScheduleCreate,
+  handleScheduleDelete,
+  handleScheduleEdit,
+  handleScheduleQuery,
+} = require("./schedule");
 const {
-  initDB,
-  getUpcomingSchedules,
-  markAsReminded,
-  deleteSchedule,
-  updateSchedule,
-  getScheduleById,
-} = require("./database");
+  parseFinanceInput,
+  handleFinanceRecord,
+  handleFinanceQuery,
+  generateMonthlyReport,
+} = require("./finance");
 
 let db;
 
@@ -56,108 +56,93 @@ async function connectToWhatsApp() {
       const msg = messages[0];
       if (!msg.message) return;
 
+      const isGroup = msg.key.remoteJid.endsWith("@g.us");
+      const userId = isGroup
+        ? msg.key.participantAlt || msg.key.participant
+        : msg.key.remoteJid;
+
       const remoteJid = msg.key.remoteJid;
+
       const textMessage =
         msg.message.conversation || msg.message.extendedTextMessage?.text;
 
       console.log(msg);
       if (!textMessage) return;
 
-      const scheduleData = await parseSchedule(textMessage);
+      if (!textMessage.startsWith("p,")) return;
 
-      if (scheduleData) {
-        const scheduleCount = scheduleData.length;
+      const cleanMessage = textMessage.substring(2).trim();
 
-        for (const schedule of scheduleData) {
-          await db.query(
-            `INSERT INTO schedules (task, time, user_id) VALUES (?, ?, ?)`,
-            [schedule.task, schedule.time, remoteJid]
+      console.log(`[MESSAGE] Clean message: "${cleanMessage}"`);
+
+      if (cleanMessage.toLowerCase() === "report") {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        await generateMonthlyReport(db, sock, userId, remoteJid, year, month);
+        return;
+      }
+
+      const messageType = await determineMessageType(cleanMessage);
+
+      if (messageType === "finance") {
+        const financeData = await parseFinanceInput(cleanMessage);
+
+        if (financeData && financeData.action === "record") {
+          await handleFinanceRecord(db, sock, userId, remoteJid, financeData);
+        } else if (financeData && financeData.action === "query") {
+          await handleFinanceQuery(
+            db,
+            sock,
+            userId,
+            remoteJid,
+            financeData.queryType
           );
-          console.log(
-            `[DATABASE SUCCESS] New Schedule Saved! Task: "${schedule.task}" | Time: ${schedule.time}`
-          );
-        }
-
-        let responseText;
-        if (scheduleCount === 1) {
-          responseText = `Oke noted, udah aku catet ya!\n\n📝: ${scheduleData[0].task}\n⏰: ${scheduleData[0].time}`;
         } else {
-          responseText = `Oke noted, udah aku catet ${scheduleCount} jadwal ya!\n\n`;
-          scheduleData.forEach((schedule, index) => {
-            responseText += `${index + 1}. 📝 ${schedule.task}\n   ⏰ ${
-              schedule.time
-            }\n\n`;
+          await sock.sendMessage(remoteJid, {
+            text: "❌ Mohon format input dengan jelas ya! (contoh: beli cilok 2k, berapa saldo)",
           });
         }
-
-        await sock.sendMessage(remoteJid, { text: responseText });
       } else {
-        const userSchedules = await getUpcomingSchedules(db, remoteJid);
+        const userSchedules = await getUpcomingSchedules(db, userId);
 
-        const deleteData = await parseDeleteRequest(textMessage, userSchedules);
-        if (deleteData) {
-          if (deleteData.needsConfirmation) {
-            const confirmMessage = `❓ Permintaan Hapus Tidak Jelas\n\n${deleteData.details}\n\nTolong kasih info yang lebih jelas ya, kak!`;
-            await sock.sendMessage(remoteJid, { text: confirmMessage });
-            return;
-          }
+        const created = await handleScheduleCreate(
+          db,
+          sock,
+          userId,
+          remoteJid,
+          cleanMessage
+        );
+        if (created) return;
 
-          const scheduleToDelete = await getScheduleById(db, deleteData.id);
-          if (scheduleToDelete) {
-            await deleteSchedule(db, deleteData.id);
-            const deleteMessage = `✅ Jadwal berhasil dihapus!\n\n📝: ${scheduleToDelete.task}\n⏰: ${scheduleToDelete.time}`;
-            await sock.sendMessage(remoteJid, { text: deleteMessage });
-            console.log(
-              `[DATABASE SUCCESS] Schedule Deleted! Task: "${scheduleToDelete.task}"`
-            );
-          } else {
-            await sock.sendMessage(remoteJid, {
-              text: "❌ Jadwal tidak ditemukan!",
-            });
-          }
-          return;
-        }
+        const deleted = await handleScheduleDelete(
+          db,
+          sock,
+          userId,
+          remoteJid,
+          cleanMessage,
+          userSchedules
+        );
+        if (deleted) return;
 
-        const editData = await parseEditRequest(textMessage, userSchedules);
-        if (editData) {
-          if (editData.needsConfirmation) {
-            const confirmMessage = `❓ Permintaan Edit Tidak Jelas\n\n${editData.details}\n\nTolong kasih info yang lebih jelas ya, kak!`;
-            await sock.sendMessage(remoteJid, { text: confirmMessage });
-            return;
-          }
+        const edited = await handleScheduleEdit(
+          db,
+          sock,
+          userId,
+          remoteJid,
+          cleanMessage,
+          userSchedules
+        );
+        if (edited) return;
 
-          const scheduleToEdit = await getScheduleById(db, editData.id);
-          if (scheduleToEdit) {
-            const oldTask = scheduleToEdit.task;
-            const oldTime = scheduleToEdit.time;
-
-            const newTask = editData.newTask || oldTask;
-            const newTime = editData.newTime || oldTime;
-
-            await updateSchedule(db, editData.id, newTask, newTime);
-
-            let editMessage = `✏️ Jadwal berhasil diubah!\n\n`;
-            editMessage += `📋 *SEBELUM:*\n📝: ${oldTask}\n⏰: ${oldTime}\n\n`;
-            editMessage += `📋 *SESUDAH:*\n📝: ${newTask}\n⏰: ${newTime}`;
-            await sock.sendMessage(remoteJid, { text: editMessage });
-            console.log(
-              `[DATABASE SUCCESS] Schedule Updated! Old: "${oldTask}" → New: "${newTask}"`
-            );
-          } else {
-            await sock.sendMessage(remoteJid, {
-              text: "❌ Jadwal tidak ditemukan!",
-            });
-          }
-          return;
-        }
-
-        console.log("=== DEBUG SCHEDULES ===");
-        console.log("User ID:", remoteJid);
-        console.log("Jadwal Ditemukan:", userSchedules);
-        console.log("=======================");
-
-        const reply = await generateAIResponse(textMessage, userSchedules);
-        await sock.sendMessage(remoteJid, { text: reply });
+        await handleScheduleQuery(
+          db,
+          sock,
+          userId,
+          remoteJid,
+          cleanMessage,
+          userSchedules
+        );
       }
     }
   });
@@ -195,6 +180,49 @@ async function connectToWhatsApp() {
       console.error("❌ Error Scheduler:", error.message);
     }
   }, 60000);
+
+  // Auto-send monthly report at end of month
+  setInterval(async () => {
+    const now = new Date();
+    const jakartaNow = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" })
+    );
+
+    const hour = jakartaNow.getHours();
+    const minute = jakartaNow.getMinutes();
+    const date = jakartaNow.getDate();
+
+    // Check if it's end of month (28th-31st at 23:59)
+    const isEndOfMonth = [28, 29, 30, 31].includes(date);
+    const isLateEvening = hour === 23 && minute === 59;
+
+    if (isEndOfMonth && isLateEvening) {
+      console.log("📊 Mengirim laporan keuangan bulanan...");
+
+      try {
+        // Get all users who have finance data
+        const [users] = await db.query(`SELECT DISTINCT user_id FROM finances`);
+
+        for (const user of users) {
+          const userId = user.user_id;
+          const year = jakartaNow.getFullYear();
+          const month = jakartaNow.getMonth() + 1;
+
+          // Send report
+          await generateMonthlyReport(db, sock, userId, userId, year, month);
+
+          // Small delay to avoid rate limiting
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+
+        console.log(
+          `✅ Selesai mengirim ${users.length} laporan keuangan bulanan`
+        );
+      } catch (error) {
+        console.error("❌ Error sending monthly reports:", error.message);
+      }
+    }
+  }, 60000); // Check every minute
 
   return sock;
 }

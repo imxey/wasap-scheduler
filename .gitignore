@@ -3,3 +3,4 @@ node_modules
 schedules.db
 package-lock.json
 auth
+reports

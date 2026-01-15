@@ -4,6 +4,7 @@
     "dotenv": "^17.2.3",
     "groq-sdk": "^0.37.0",
     "mysql2": "^3.16.0",
+    "pdfkit": "^0.17.2",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0"
   }
