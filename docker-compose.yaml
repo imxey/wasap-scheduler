@@ -26,7 +26,7 @@ services:
       - MYSQL_USER=wasap
       - MYSQL_PASSWORD=wasap123
     volumes:
-      - wasap-data:/var/lib/mysql
+      - ./mysql-data:/var/lib/mysql
     networks:
       - wanetwork
     restart: unless-stopped

@@ -1,3 +1,4 @@
+require("dotenv").config();
 const {
   default: makeWASocket,
   useMultiFileAuthState,
@@ -105,7 +106,7 @@ async function connectToWhatsApp() {
             sock,
             userId,
             remoteJid,
-            financeData.queryType
+            financeData.queryType,
           );
         } else {
           await sock.sendMessage(remoteJid, {
@@ -120,7 +121,7 @@ async function connectToWhatsApp() {
           sock,
           userId,
           remoteJid,
-          cleanMessage
+          cleanMessage,
         );
         if (created) return;
 
@@ -130,7 +131,7 @@ async function connectToWhatsApp() {
           userId,
           remoteJid,
           cleanMessage,
-          userSchedules
+          userSchedules,
         );
         if (deleted) return;
 
@@ -140,7 +141,7 @@ async function connectToWhatsApp() {
           userId,
           remoteJid,
           cleanMessage,
-          userSchedules
+          userSchedules,
         );
         if (edited) return;
 
@@ -150,7 +151,7 @@ async function connectToWhatsApp() {
           userId,
           remoteJid,
           cleanMessage,
-          userSchedules
+          userSchedules,
         );
       }
     }
@@ -170,7 +171,7 @@ async function connectToWhatsApp() {
         `SELECT * FROM schedules 
              WHERE DATE_FORMAT(time, '%Y-%m-%d %H:%i') = ? 
              AND is_reminded = 0`,
-        [currentMinute]
+        [currentMinute],
       );
 
       if (tasks.length > 0) {
@@ -194,7 +195,7 @@ async function connectToWhatsApp() {
   setInterval(async () => {
     const now = new Date();
     const jakartaNow = new Date(
-      now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" })
+      now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }),
     );
 
     const hour = jakartaNow.getHours();
@@ -225,7 +226,7 @@ async function connectToWhatsApp() {
         }
 
         console.log(
-          `✅ Selesai mengirim ${users.length} laporan keuangan bulanan`
+          `✅ Selesai mengirim ${users.length} laporan keuangan bulanan`,
         );
       } catch (error) {
         console.error("❌ Error sending monthly reports:", error.message);
