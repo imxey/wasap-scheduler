@@ -4,3 +4,4 @@ schedules.db
 package-lock.json
 auth
 reports
+mysql-data
