@@ -63,6 +63,7 @@ async function connectToWhatsApp() {
         : msg.key.remoteJid;
 
       const remoteJid = msg.key.remoteJid;
+      const remoteJidAlt = msg.key.remoteJidAlt;
 
       const textMessage =
         msg.message.conversation || msg.message.extendedTextMessage?.text;
@@ -74,7 +75,7 @@ async function connectToWhatsApp() {
         .split(",")
         .map((n) => n.trim());
       const isTrustedPC =
-        !isGroup && trustedNumbers.some((num) => remoteJid.startsWith(num));
+        !isGroup && trustedNumbers.some((num) => remoteJidAlt.startsWith(num));
       const requiresPrefix = isGroup || !isTrustedPC;
 
       if (requiresPrefix && !textMessage.startsWith("p,")) return;
